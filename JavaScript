@@ -1,0 +1,275 @@
+const obter = chave =>
+  JSON.parse(localStorage.getItem(chave) || "[]");
+
+let clientes = obter("clientes");
+let produtos = obter("produtos");
+let pedidos = obter("pedidos");
+
+const dinheiro = valor =>
+  Number(valor).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+
+const porId = id => document.getElementById(id);
+
+function salvar() {
+  localStorage.setItem("clientes", JSON.stringify(clientes));
+  localStorage.setItem("produtos", JSON.stringify(produtos));
+  localStorage.setItem("pedidos", JSON.stringify(pedidos));
+}
+
+function avisar(texto) {
+  porId("mensagem").textContent = texto;
+}
+
+function criarTabela(id, colunas, linhas) {
+  const destino = porId(id);
+  destino.replaceChildren();
+
+  if (!linhas.length) {
+    destino.textContent = "Nenhum registro encontrado.";
+    return;
+  }
+
+  const tabela = document.createElement("table");
+  const cabecalho = document.createElement("tr");
+
+  colunas.forEach(coluna => {
+    const th = document.createElement("th");
+    th.textContent = coluna;
+    cabecalho.appendChild(th);
+  });
+
+  const thead = document.createElement("thead");
+  thead.appendChild(cabecalho);
+  tabela.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+
+  linhas.forEach(linha => {
+    const tr = document.createElement("tr");
+
+    linha.forEach(valor => {
+      const td = document.createElement("td");
+      td.textContent = valor;
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  tabela.appendChild(tbody);
+
+  const container = document.createElement("div");
+  container.className = "tabela-container";
+  container.appendChild(tabela);
+  destino.appendChild(container);
+}
+
+function atualizarSeletores() {
+  const seletorCliente = porId("cliente-pedido");
+  const seletorProduto = porId("produto-pedido");
+
+  seletorCliente.replaceChildren();
+  seletorProduto.replaceChildren();
+
+  clientes.forEach(cliente => {
+    const opcao = document.createElement("option");
+    opcao.value = cliente.id;
+    opcao.textContent = cliente.nome;
+    seletorCliente.appendChild(opcao);
+  });
+
+  produtos.filter(p => p.estoque > 0).forEach(produto => {
+    const opcao = document.createElement("option");
+    opcao.value = produto.id;
+    opcao.textContent = `${produto.nome} — ${dinheiro(produto.preco)} (Estoque: ${produto.estoque})`;
+    seletorProduto.appendChild(opcao);
+  });
+
+  seletorCliente.disabled = clientes.length === 0;
+  seletorProduto.disabled = !produtos.some(p => p.estoque > 0);
+}
+
+function renderizar() {
+  criarTabela("lista-clientes",
+    ["ID", "Nome", "Telefone", "E-mail"],
+    clientes.map(c => [c.id, c.nome, c.telefone, c.email])
+  );
+
+  criarTabela("lista-produtos",
+    ["ID", "Produto", "Preço", "Estoque"],
+    produtos.map(p => [p.id, p.nome, dinheiro(p.preco), p.estoque])
+  );
+
+  criarTabela("lista-pedidos",
+    ["Pedido", "Cliente", "Produto", "Quantidade", "Total", "Data", "Status"],
+    pedidos.map(p => [
+      p.id,
+      p.cliente,
+      p.produto,
+      p.quantidade,
+      dinheiro(p.total),
+      new Date(p.data).toLocaleDateString("pt-BR"),
+      p.status
+    ])
+  );
+
+  porId("total-clientes").textContent = clientes.length;
+  porId("total-produtos").textContent = produtos.length;
+  porId("total-pedidos").textContent = pedidos.length;
+
+  const concluidos = pedidos.filter(p => p.status === "Concluído");
+  const total = concluidos.reduce((soma, p) => soma + p.total, 0);
+
+  porId("faturamento").textContent = dinheiro(total);
+
+  criarTabela("pedidos-recentes",
+    ["Pedido", "Cliente", "Total", "Status"],
+    [...pedidos].reverse().slice(0, 5).map(p => [
+      p.id, p.cliente, dinheiro(p.total), p.status
+    ])
+  );
+
+  atualizarSeletores();
+  gerarRelatorio();
+}
+
+document.querySelectorAll("[data-pagina]").forEach(botao => {
+  botao.addEventListener("click", () => {
+    document.querySelectorAll(".pagina").forEach(pagina => {
+      pagina.classList.add("escondido");
+    });
+
+    porId(botao.dataset.pagina).classList.remove("escondido");
+    avisar("");
+  });
+});
+
+porId("form-cliente").addEventListener("submit", evento => {
+  evento.preventDefault();
+
+  clientes.push({
+    id: Date.now(),
+    nome: porId("nome-cliente").value.trim(),
+    telefone: porId("telefone-cliente").value.trim(),
+    email: porId("email-cliente").value.trim()
+  });
+
+  salvar();
+  renderizar();
+  evento.target.reset();
+  avisar("Cliente cadastrado com sucesso!");
+});
+
+porId("form-produto").addEventListener("submit", evento => {
+  evento.preventDefault();
+
+  const preco = Number(porId("preco-produto").value);
+  const estoque = Number(porId("estoque-produto").value);
+  const nome = porId("nome-produto").value.trim();
+
+  if (!nome || !Number.isFinite(preco) || preco <= 0 ||
+      !Number.isInteger(estoque) || estoque < 0) {
+    avisar("Informe um produto, preço e estoque válidos.");
+    return;
+  }
+
+  produtos.push({
+    id: Date.now(),
+    nome,
+    preco,
+    estoque
+  });
+
+  salvar();
+  renderizar();
+  evento.target.reset();
+  avisar("Produto cadastrado com sucesso!");
+});
+
+porId("form-pedido").addEventListener("submit", evento => {
+  evento.preventDefault();
+
+  const cliente = clientes.find(
+    c => c.id === Number(porId("cliente-pedido").value)
+  );
+
+  const produto = produtos.find(
+    p => p.id === Number(porId("produto-pedido").value)
+  );
+
+  const quantidade = Number(porId("quantidade-pedido").value);
+
+  if (!cliente || !produto || !Number.isInteger(quantidade) ||
+      quantidade < 1 || quantidade > produto.estoque) {
+    avisar("Confira o cliente, o produto e a quantidade em estoque.");
+    return;
+  }
+
+  const pedido = {
+    id: pedidos.length
+      ? Math.max(...pedidos.map(p => p.id)) + 1
+      : 1,
+    cliente: cliente.nome,
+    produto: produto.nome,
+    quantidade,
+    total: Number((produto.preco * quantidade).toFixed(2)),
+    data: new Date().toISOString(),
+    status: "Concluído"
+  };
+
+  produto.estoque -= quantidade;
+  pedidos.push(pedido);
+
+  salvar();
+  renderizar();
+  evento.target.reset();
+  porId("quantidade-pedido").value = 1;
+  avisar(`Pedido #${pedido.id} registrado com sucesso!`);
+});
+
+function gerarRelatorio() {
+  const inicio = porId("data-inicial").value;
+  const fim = porId("data-final").value;
+
+  let filtrados = pedidos.filter(p => {
+    const data = p.data.slice(0, 10);
+    return (!inicio || data >= inicio) &&
+           (!fim || data <= fim);
+  });
+
+  const concluidos = filtrados.filter(p => p.status === "Concluído");
+  const total = concluidos.reduce((soma, p) => soma + p.total, 0);
+
+  porId("relatorio-pedidos").textContent = filtrados.length;
+  porId("relatorio-total").textContent = dinheiro(total);
+
+  criarTabela("resultado-relatorio",
+    ["Pedido", "Cliente", "Produto", "Total", "Data", "Status"],
+    filtrados.map(p => [
+      p.id,
+      p.cliente,
+      p.produto,
+      dinheiro(p.total),
+      new Date(p.data).toLocaleDateString("pt-BR"),
+      p.status
+    ])
+  );
+}
+
+porId("filtrar-relatorio").addEventListener("click", () => {
+  const inicio = porId("data-inicial").value;
+  const fim = porId("data-final").value;
+
+  if (inicio && fim && inicio > fim) {
+    avisar("A data inicial deve ser anterior à data final.");
+    return;
+  }
+
+  avisar("");
+  gerarRelatorio();
+});
+
+renderizar();
