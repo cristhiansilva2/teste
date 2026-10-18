@@ -1,0 +1,166 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+header {
+  background: #172554;
+  color: white;
+  padding: 24px;
+}
+
+header h1,
+header p {
+  margin: 5px 0;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 24px;
+  background: white;
+  box-shadow: 0 2px 8px #0000000d;
+}
+
+button {
+  border: none;
+  border-radius: 6px;
+  padding: 11px 16px;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+main {
+  max-width: 1100px;
+  margin: 28px auto;
+  padding: 0 20px;
+}
+
+.pagina {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px #0000000d;
+}
+
+.escondido {
+  display: none;
+}
+
+.resumos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.cartao {
+  background: #eff6ff;
+  padding: 18px;
+  border-radius: 10px;
+  border-left: 4px solid #2563eb;
+}
+
+.cartao h3 {
+  font-size: 15px;
+  margin-top: 0;
+}
+
+.cartao p {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+label {
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 15px;
+  background: white;
+}
+
+form button {
+  margin-top: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+th {
+  background: #f8fafc;
+}
+
+.tabela-container {
+  overflow-x: auto;
+}
+
+.excluir {
+  background: #dc2626;
+}
+
+.excluir:hover {
+  background: #b91c1c;
+}
+
+#mensagem {
+  padding: 10px 0;
+  font-weight: bold;
+}
+
+@media (max-width: 600px) {
+  nav {
+    padding: 12px;
+  }
+
+  main {
+    padding: 0 10px;
+  }
+
+  .pagina {
+    padding: 16px;
+  }
+
+  th,
+  td {
+    padding: 8px;
+    font-size: 13px;
+  }
+}
