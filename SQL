@@ -1,0 +1,51 @@
+
+-- 1. Clientes
+create table public.clientes (
+  id bigint generated always as identity primary key,
+  nome text not null,
+  cpf varchar(11) not null unique,
+  telefone text not null,
+  email text not null,
+  criado_em timestamptz not null default now(),
+  constraint cpf_formato check (cpf ~ '^[0-9]{11}$')
+);
+
+-- 2. Produtos
+create table public.produtos (
+  id bigint generated always as identity primary key,
+  nome text not null,
+  preco numeric(12,2) not null check (preco > 0),
+  estoque integer not null default 0 check (estoque >= 0),
+  criado_em timestamptz not null default now()
+);
+
+-- 3. Vendas
+create table public.vendas (
+  id bigint generated always as identity primary key,
+  cliente_id bigint not null
+    references public.clientes(id),
+  data_venda timestamptz not null default now(),
+  total numeric(12,2) not null check (total >= 0)
+);
+
+-- 4. Produtos de cada venda
+create table public.itens_venda (
+  id bigint generated always as identity primary key,
+  venda_id bigint not null
+    references public.vendas(id) on delete restrict,
+  produto_id bigint
+    references public.produtos(id) on delete set null,
+  nome_produto text not null,
+  preco_unitario numeric(12,2) not null,
+  quantidade integer not null check (quantidade > 0),
+  subtotal numeric(12,2) not null
+);
+
+create index idx_vendas_cliente
+  on public.vendas(cliente_id);
+
+create index idx_vendas_data
+  on public.vendas(data_venda);
+
+create index idx_itens_venda
+  on public.itens_venda(venda_id);
