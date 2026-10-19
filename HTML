@@ -1,127 +1,282 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sistema Empresarial de Vendas</title>
+  <title>Sistema de Vendas</title>
   <link rel="stylesheet" href="main.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="main.js" defer></script>
 </head>
 <body>
-  <header>
-    <h1>Sistema de Vendas</h1>
-    <p>Controle empresarial</p>
+  <header class="topo">
+    <div>
+      <h1>Sistema de Vendas</h1>
+      <p>Clientes, produtos e controle de vendas</p>
+    </div>
+    <span id="statusConexao" class="status">Conectando...</span>
   </header>
 
-  <nav>
-    <button data-pagina="inicio">Início</button>
-    <button data-pagina="clientes">Clientes</button>
-    <button data-pagina="produtos">Produtos</button>
-    <button data-pagina="pedidos">Pedidos</button>
-    <button data-pagina="relatorios">Relatórios</button>
+  <nav class="menu">
+    <button class="aba ativa" data-aba="inicio">Início</button>
+    <button class="aba" data-aba="clientes">Clientes</button>
+    <button class="aba" data-aba="produtos">Produtos</button>
+    <button class="aba" data-aba="vendas">Vendas</button>
+    <button class="aba" data-aba="historico">Compras por cliente</button>
+    <button class="aba" data-aba="relatorios">Relatórios</button>
   </nav>
 
-  <main>
-    <section id="inicio" class="pagina">
-      <h2>Painel principal</h2>
+  <main class="container">
+    <div id="mensagem" class="mensagem" role="status" aria-live="polite"></div>
+
+    <section id="inicio" class="painel">
+      <h2>Visão geral</h2>
+      <p class="subtitulo">Resumo dos dados cadastrados no sistema.</p>
+
       <div class="resumos">
-        <article class="cartao">
-          <h3>Clientes</h3>
-          <p id="total-clientes">0</p>
+        <article class="resumo">
+          <span>Clientes</span>
+          <strong id="totalClientes">0</strong>
         </article>
-        <article class="cartao">
-          <h3>Produtos</h3>
-          <p id="total-produtos">0</p>
+        <article class="resumo">
+          <span>Produtos</span>
+          <strong id="totalProdutos">0</strong>
         </article>
-        <article class="cartao">
-          <h3>Pedidos</h3>
-          <p id="total-pedidos">0</p>
+        <article class="resumo">
+          <span>Vendas</span>
+          <strong id="totalVendas">0</strong>
         </article>
-        <article class="cartao">
-          <h3>Faturamento</h3>
-          <p id="faturamento">R$ 0,00</p>
+        <article class="resumo">
+          <span>Valor vendido</span>
+          <strong id="valorVendido">R$ 0,00</strong>
         </article>
       </div>
-      <h3>Pedidos recentes</h3>
-      <div id="pedidos-recentes"></div>
+
+      <h3>Últimas vendas</h3>
+      <div class="tabela-conteiner">
+        <table>
+          <thead>
+            <tr>
+              <th>ID da venda</th>
+              <th>Cliente</th>
+              <th>Data</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody id="ultimasVendas">
+            <tr><td colspan="4">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
-    <section id="clientes" class="pagina escondido">
+    <section id="clientes" class="painel escondido">
       <h2>Cadastro de clientes</h2>
-      <form id="form-cliente">
-        <label for="nome-cliente">Nome completo</label>
-        <input id="nome-cliente" required>
+      <p class="subtitulo">Cada cliente recebe um ID gerado pelo banco de dados.</p>
 
-        <label for="telefone-cliente">Telefone</label>
-        <input id="telefone-cliente" type="tel" required>
+      <form id="formCliente" class="formulario">
+        <label>
+          Nome completo
+          <input id="clienteNome" type="text" maxlength="120" required>
+        </label>
 
-        <label for="email-cliente">E-mail</label>
-        <input id="email-cliente" type="email" required>
+        <label>
+          CPF (somente números ou com pontuação)
+          <input id="clienteCpf" type="text" inputmode="numeric"
+                 maxlength="14" placeholder="000.000.000-00" required>
+        </label>
 
-        <button type="submit">Cadastrar cliente</button>
+        <label>
+          Telefone
+          <input id="clienteTelefone" type="tel" maxlength="30">
+        </label>
+
+        <label>
+          E-mail
+          <input id="clienteEmail" type="email" maxlength="254">
+        </label>
+
+        <button type="submit" class="botao primario">Cadastrar cliente</button>
       </form>
-      <div id="lista-clientes"></div>
-    </section>
 
-    <section id="produtos" class="pagina escondido">
-      <h2>Cadastro de produtos</h2>
-      <form id="form-produto">
-        <label for="nome-produto">Nome do produto</label>
-        <input id="nome-produto" required>
-
-        <label for="preco-produto">Preço (R$)</label>
-        <input id="preco-produto" type="number" min="0.01" step="0.01" required>
-
-        <label for="estoque-produto">Quantidade em estoque</label>
-        <input id="estoque-produto" type="number" min="0" step="1" required>
-
-        <button type="submit">Cadastrar produto</button>
-      </form>
-      <div id="lista-produtos"></div>
-    </section>
-
-    <section id="pedidos" class="pagina escondido">
-      <h2>Novo pedido</h2>
-      <form id="form-pedido">
-        <label for="cliente-pedido">Cliente</label>
-        <select id="cliente-pedido" required></select>
-
-        <label for="produto-pedido">Produto</label>
-        <select id="produto-pedido" required></select>
-
-        <label for="quantidade-pedido">Quantidade</label>
-        <input id="quantidade-pedido" type="number" min="1" step="1" value="1" required>
-
-        <button type="submit">Registrar pedido</button>
-      </form>
-      <h3>Histórico de pedidos</h3>
-      <div id="lista-pedidos"></div>
-    </section>
-
-    <section id="relatorios" class="pagina escondido">
-      <h2>Relatório de vendas</h2>
-      <label for="data-inicial">Data inicial</label>
-      <input id="data-inicial" type="date">
-
-      <label for="data-final">Data final</label>
-      <input id="data-final" type="date">
-
-      <button id="filtrar-relatorio" type="button">Filtrar</button>
-      <div class="resumos">
-        <article class="cartao">
-          <h3>Pedidos no período</h3>
-          <p id="relatorio-pedidos">0</p>
-        </article>
-        <article class="cartao">
-          <h3>Vendas no período</h3>
-          <p id="relatorio-total">R$ 0,00</p>
-        </article>
+      <h3>Clientes cadastrados</h3>
+      <div class="tabela-conteiner">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nome</th>
+              <th>CPF</th>
+              <th>Telefone</th>
+              <th>E-mail</th>
+            </tr>
+          </thead>
+          <tbody id="listaClientes">
+            <tr><td colspan="5">Carregando...</td></tr>
+          </tbody>
+        </table>
       </div>
-      <div id="resultado-relatorio"></div>
     </section>
 
-    <p id="mensagem" role="status"></p>
-  </main>
+    <section id="produtos" class="painel escondido">
+      <h2>Cadastro de produtos</h2>
+
+      <form id="formProduto" class="formulario">
+        <label>
+          Nome do produto
+          <input id="produtoNome" type="text" maxlength="120" required>
+        </label>
+
+        <label>
+          Preço (R$)
+          <input id="produtoPreco" type="number" min="0.01"
+                 step="0.01" required>
+        </label>
+
+        <label>
+          Quantidade inicial em estoque
+          <input id="produtoEstoque" type="number" min="0"
+                 step="1" required>
+        </label>
+
+        <button type="submit" class="botao primario">Cadastrar produto</button>
+      </form>
+
+      <h3>Produtos cadastrados</h3>
+      <div class="tabela-conteiner">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Produto</th>
+              <th>Preço</th>
+              <th>Estoque</th>
+            </tr>
+          </thead>
+          <tbody id="listaProdutos">
+            <tr><td colspan="4">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="vendas" class="painel escondido">
+      <h2>Registrar venda</h2>
+      <p class="subtitulo">
+        A venda só será registrada se houver estoque suficiente.
+      </p>
+
+      <form id="formVenda" class="formulario">
+        <label>
+          Cliente
+          <select id="vendaCliente" required>
+            <option value="">Selecione um cliente</option>
+          </select>
+        </label>
+
+        <label>
+          Produto
+          <select id="vendaProduto" required>
+            <option value="">Selecione um produto</option>
+          </select>
+        </label>
+
+        <label>
+          Quantidade
+          <input id="vendaQuantidade" type="number" min="1"
+                 step="1" value="1" required>
+        </label>
+
+        <button type="submit" class="botao primario">Registrar venda</button>
+      </form>
+
+      <p class="aviso">
+        Esta versão registra um produto por venda. O banco guarda os itens
+        separadamente para permitir ampliar o sistema depois.
+      </p>
+    </section>
+
+    <section id="historico" class="painel escondido">
+      <h2>Histórico de compras por cliente</h2>
+
+      <label class="campo-filtro">
+        Selecione o cliente
+        cione um cliente</option>
+</select>
+</label>
+
+<div id="dadosCliente" class="dados-cliente escondido"></div>
+
+<h3>Compras realizadas</h3>
+<div class="tabela-conteiner">
+  <table>
+    <thead>
+      <tr>
+        <th>ID da venda</th>
+        <th>Data</th>
+        <th>Produto</th>
+        <th>Quantidade</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody id="listaHistorico">
+      <tr>
+        <td colspan="5">Selecione um cliente.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+</section>
+
+<section id="relatorios" class="painel escondido">
+  <h2>Relatórios de vendas</h2>
+  <p class="subtitulo">Consulte as vendas por período.</p>
+
+  <form id="formRelatorio" class="formulario">
+    <label>
+      Data inicial
+      <input id="dataInicial" type="date">
+    </label>
+
+    <label>
+      Data final
+      <input id="dataFinal" type="date">
+    </label>
+
+    <div class="acoes">
+      <button type="submit" class="botao primario">Gerar relatório</button>
+      <button id="limparRelatorio" type="button" class="botao">Limpar filtros</button>
+    </div>
+  </form>
+
+  <p id="resumoRelatorio" class="subtitulo">
+    Selecione o período e gere o relatório.
+  </p>
+
+  <div class="tabela-conteiner">
+    <table>
+      <thead>
+        <tr>
+          <th>ID da venda</th>
+          <th>Cliente</th>
+          <th>Data</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="listaRelatorio">
+        <tr>
+          <td colspan="4">Configure o período do relatório.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+</main>
+
+<footer class="rodape">
+  <p>Sistema de Vendas</p>
+</footer>
+
 </body>
 </html>
