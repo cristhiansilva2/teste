@@ -1,275 +1,683 @@
-const obter = chave =>
-  JSON.parse(localStorage.getItem(chave) || "[]");
+"use strict";
 
-let clientes = obter("clientes");
-let produtos = obter("produtos");
-let pedidos = obter("pedidos");
+const config = window.APP_CONFIG || {};
+const mensagem = document.getElementById("mensagem");
+const statusConexao = document.getElementById("statusConexao");
 
-const dinheiro = valor =>
-  Number(valor).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
+let banco = null;
+let clientes = [];
+let produtos = [];
+let vendas = [];
 
-const porId = id => document.getElementById(id);
+const dinheiro = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL"
+});
 
-function salvar() {
-  localStorage.setItem("clientes", JSON.stringify(clientes));
-  localStorage.setItem("produtos", JSON.stringify(produtos));
-  localStorage.setItem("pedidos", JSON.stringify(pedidos));
+const dataHora = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "short"
+});
+
+function mostrarMensagem(texto, tipo = "sucesso") {
+  mensagem.textContent = texto;
+  mensagem.className = `mensagem ${tipo}`;
 }
 
-function avisar(texto) {
-  porId("mensagem").textContent = texto;
+function limparMensagem() {
+  mensagem.textContent = "";
+  mensagem.className = "mensagem";
 }
 
-function criarTabela(id, colunas, linhas) {
-  const destino = porId(id);
-  destino.replaceChildren();
+function criarCelula(linha, texto) {
+  const celula = document.createElement("td");
+  celula.textContent = texto ?? "";
+  linha.appendChild(celula);
+  return celula;
+}
+
+function preencherTabela(id, linhas, colunas, mensagemVazia) {
+  const corpo = document.getElementById(id);
+  corpo.replaceChildren();
 
   if (!linhas.length) {
-    destino.textContent = "Nenhum registro encontrado.";
+    const linha = document.createElement("tr");
+    const celula = document.createElement("td");
+    celula.colSpan = colunas;
+    celula.textContent = mensagemVazia;
+    linha.appendChild(celula);
+    corpo.appendChild(linha);
     return;
   }
 
-  const tabela = document.createElement("table");
-  const cabecalho = document.createElement("tr");
+  for (const valores of linhas) {
+    const linha = document.createElement("tr");
 
-  colunas.forEach(coluna => {
-    const th = document.createElement("th");
-    th.textContent = coluna;
-    cabecalho.appendChild(th);
-  });
+    for (const valor of valores) {
+      criarCelula(linha, valor);
+    }
 
-  const thead = document.createElement("thead");
-  thead.appendChild(cabecalho);
-  tabela.appendChild(thead);
+    corpo.appendChild(linha);
+  }
+}
 
-  const tbody = document.createElement("tbody");
+function adicionarOpcao(select, valor, texto) {
+  const opcao = document.createElement("option");
+  opcao.value = String(valor);
+  opcao.textContent = texto;
+  select.appendChild(opcao);
+}
 
-  linhas.forEach(linha => {
-    const tr = document.createElement("tr");
+function preencherSelect(id, itens, textoInicial, formatar) {
+  const select = document.getElementById(id);
 
-    linha.forEach(valor => {
-      const td = document.createElement("td");
-      td.textContent = valor;
-      tr.appendChild(td);
+  if (!select) {
+    console.error(`Campo select não encontrado no HTML: ${id}`);
+    return;
+  }
+
+  const valorAnterior = select.value;
+
+  select.replaceChildren();
+  adicionarOpcao(select, "", textoInicial);
+
+  for (const item of itens) {
+    adicionarOpcao(select, item.id, formatar(item));
+  }
+
+  if ([...select.options].some(opcao => opcao.value === valorAnterior)) {
+    select.value = valorAnterior;
+  }
+}
+
+
+
+function normalizarCpf(valor) {
+  return valor.replace(/\D/g, "");
+}
+
+function nomeCliente(id) {
+  const cliente = clientes.find(item => item.id === id);
+  return cliente ? cliente.nome : `Cliente #${id}`;
+}
+
+function dataFormatada(valor) {
+  if (!valor) return "—";
+
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return "Data inválida";
+
+  return dataHora.format(data);
+}
+
+function erroLegivel(erro) {
+  const texto = `${erro?.message || ""} ${erro?.details || ""}`;
+
+  if (erro?.code === "23505" || /duplicate key|unique constraint/i.test(texto)) {
+    return "Este CPF já está cadastrado. Cada cliente precisa ter um CPF diferente.";
+  }
+
+  if (/ESTOQUE_INSUFICIENTE/i.test(texto)) {
+    return "Estoque insuficiente. Reduza a quantidade ou cadastre mais unidades.";
+  }
+
+  if (/QUANTIDADE_INVALIDA/i.test(texto)) {
+    return "Informe uma quantidade válida, maior que zero.";
+  }
+
+  if (/CLIENTE_NAO_ENCONTRADO/i.test(texto)) {
+    return "O cliente selecionado não foi encontrado.";
+  }
+
+  if (/PRODUTO_NAO_ENCONTRADO/i.test(texto)) {
+    return "O produto selecionado não foi encontrado.";
+  }
+
+  if (erro?.code === "23514") {
+    return "Um dos valores não atende às regras do banco. Confira os campos.";
+  }
+
+  if (erro?.code === "23503") {
+    return "Não foi possível concluir porque um registro relacionado não existe.";
+  }
+
+  return erro?.message || "Ocorreu um erro inesperado.";
+}
+
+function exigirBanco() {
+  if (!banco) {
+    throw new Error(
+      "O Supabase não está configurado. Confira o arquivo config.js e inicie o Supabase local."
+    );
+  }
+}
+
+async function buscarDados() {
+  exigirBanco();
+
+  const [resClientes, resProdutos, resVendas] = await Promise.all([
+    banco.from("clientes")
+      .select("id, nome, cpf, telefone, email, criado_em")
+      .order("id", { ascending: false }),
+
+    banco.from("produtos")
+      .select("id, nome, preco, estoque, criado_em")
+      .order("id", { ascending: false }),
+
+    banco.from("vendas")
+      .select("id, cliente_id, data_venda, total")
+      .order("data_venda", { ascending: false })
+  ]);
+
+  if (resClientes.error) throw resClientes.error;
+  if (resProdutos.error) throw resProdutos.error;
+  if (resVendas.error) throw resVendas.error;
+
+  clientes = resClientes.data || [];
+  produtos = resProdutos.data || [];
+  vendas = resVendas.data || [];
+
+  desenharClientes();
+  desenharProdutos();
+  preencherClientesVenda();
+  preencherProdutosVenda();
+  preencherClientesHistorico();
+  desenharInicio();
+  await desenharRelatorio();
+}
+
+function desenharClientes() {
+  preencherTabela(
+    "listaClientes",
+    clientes.map(cliente => [
+      cliente.id,
+      cliente.nome,
+      formatarCpf(cliente.cpf),
+      cliente.telefone || "—",
+      cliente.email || "—"
+    ]),
+    5,
+    "Nenhum cliente cadastrado."
+  );
+}
+
+function formatarCpf(cpf) {
+  const numeros = normalizarCpf(String(cpf || ""));
+
+  if (numeros.length !== 11) return numeros;
+
+  return numeros.replace(
+    /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+    "$1.$2.$3-$4"
+  );
+}
+
+function desenharProdutos() {
+  preencherTabela(
+    "listaProdutos",
+    produtos.map(produto => [
+      produto.id,
+      produto.nome,
+      dinheiro.format(Number(produto.preco)),
+      produto.estoque
+    ]),
+    4,
+    "Nenhum produto cadastrado."
+  );
+}
+
+function preencherClientesVenda() {
+  preencherSelect(
+    "vendaCliente",
+    [...clientes].reverse(),
+    "Selecione um cliente",
+    cliente => `${cliente.nome} (ID ${cliente.id})`
+  );
+}
+
+function preencherProdutosVenda() {
+  preencherSelect(
+    "vendaProduto",
+    [...produtos].reverse(),
+    "Selecione um produto",
+    produto =>
+      `${produto.nome} — ${dinheiro.format(Number(produto.preco))} — estoque: ${produto.estoque}`
+  );
+}
+
+function preencherClientesHistorico() {
+  preencherSelect(
+    "historicoCliente",
+    [...clientes].reverse(),
+    "Selecione um cliente",
+    cliente => `${cliente.nome} (ID ${cliente.id})`
+  );
+}
+
+function desenharInicio() {
+  document.getElementById("totalClientes").textContent = clientes.length;
+  document.getElementById("totalProdutos").textContent = produtos.length;
+  document.getElementById("totalVendas").textContent = vendas.length;
+
+  const soma = vendas.reduce(
+    (total, venda) => total + Number(venda.total),
+    0
+  );
+
+  document.getElementById("valorVendido").textContent = dinheiro.format(soma);
+
+  preencherTabela(
+    "ultimasVendas",
+    vendas.slice(0, 5).map(venda => [
+      venda.id,
+      nomeCliente(venda.cliente_id),
+      dataFormatada(venda.data_venda),
+      dinheiro.format(Number(venda.total))
+    ]),
+    4,
+    "Nenhuma venda registrada."
+  );
+}
+
+async function cadastrarCliente(evento) {
+  evento.preventDefault();
+  limparMensagem();
+
+  try {
+    exigirBanco();
+
+    const nome = document.getElementById("clienteNome").value.trim();
+    const cpf = normalizarCpf(document.getElementById("clienteCpf").value);
+    const telefone = document.getElementById("clienteTelefone").value.trim();
+    const email = document.getElementById("clienteEmail").value.trim();
+
+    if (nome.length < 2) {
+      throw new Error("Digite o nome completo do cliente.");
+    }
+
+    if (!/^\d{11}$/.test(cpf)) {
+      throw new Error("O CPF deve conter exatamente 11 números.");
+    }
+
+    const { error } = await banco
+      .from("clientes")
+      .insert([{ nome, cpf, telefone: telefone || null, email: email || null }]);
+
+    if (error) throw error;
+
+    document.getElementById("formCliente").reset();
+    await buscarDados();
+    mostrarMensagem("Cliente cadastrado com sucesso.");
+  } catch (erro) {
+    mostrarMensagem(erroLegivel(erro), "erro");
+  }
+}
+
+async function cadastrarProduto(evento) {
+  evento.preventDefault();
+  limparMensagem();
+
+  try {
+    exigirBanco();
+
+    const nome = document.getElementById("produtoNome").value.trim();
+    const preco = Number(document.getElementById("produtoPreco").value);
+    const estoqueTexto = document.getElementById("produtoEstoque").value;
+    const estoque = Number(estoqueTexto);
+
+    if (!nome) throw new Error("Informe o nome do produto.");
+    if (!Number.isFinite(preco) || preco <= 0) {
+      throw new Error("O preço deve ser maior que zero.");
+    }
+    if (estoqueTexto === "" || !Number.isInteger(estoque) || estoque < 0) {
+      throw new Error("O estoque deve ser um número inteiro igual ou maior que zero.");
+    }
+
+    const { error } = await banco
+      .from("produtos")
+      .insert([{ nome, preco, estoque }]);
+
+    if (error) throw error;
+
+    document.getElementById("formProduto").reset();
+    await buscarDados();
+    mostrarMensagem("Produto cadastrado com sucesso.");
+  } catch (erro) {
+    mostrarMensagem(erroLegivel(erro), "erro");
+  }
+}
+
+async function registrarVenda(evento) {
+  evento.preventDefault();
+  limparMensagem();
+
+  try {
+    exigirBanco();
+
+    const clienteId = Number(document.getElementById("vendaCliente").value);
+    const produtoId = Number(document.getElementById("vendaProduto").value);
+    const quantidade = Number(document.getElementById("vendaQuantidade").value);
+
+    if (!clienteId || !produtoId) {
+      throw new Error("Selecione um cliente e um produto.");
+    }
+
+    if (!Number.isInteger(quantidade) || quantidade < 1) {
+      throw new Error("A quantidade deve ser um número inteiro maior que zero.");
+    }
+
+    const { data, error } = await banco.rpc("registrar_venda", {
+      p_cliente_id: clienteId,
+      p_produto_id: produtoId,
+      p_quantidade: quantidade
     });
 
-    tbody.appendChild(tr);
-  });
+    if (error) throw error;
 
-  tabela.appendChild(tbody);
+    document.getElementById("formVenda").reset();
+    await buscarDados();
 
-  const container = document.createElement("div");
-  container.className = "tabela-container";
-  container.appendChild(tabela);
-  destino.appendChild(container);
+    mostrarMensagem(`Venda registrada com sucesso. ID da venda: ${data}.`);
+  } catch (erro) {
+    mostrarMensagem(erroLegivel(erro), "erro");
+  }
 }
 
-function atualizarSeletores() {
-  const seletorCliente = porId("cliente-pedido");
-  const seletorProduto = porId("produto-pedido");
+async function desenharHistorico() {
+  const select = document.getElementById("historicoCliente");
+  const id = Number(select.value);
+  const caixaCliente = document.getElementById("dadosCliente");
 
-  seletorCliente.replaceChildren();
-  seletorProduto.replaceChildren();
+  caixaCliente.replaceChildren();
+  caixaCliente.classList.add("escondido");
 
-  clientes.forEach(cliente => {
-    const opcao = document.createElement("option");
-    opcao.value = cliente.id;
-    opcao.textContent = cliente.nome;
-    seletorCliente.appendChild(opcao);
-  });
+  if (!id) {
+    preencherTabela("listaHistorico", [], 5, "Selecione um cliente.");
+    return;
+  }
 
-  produtos.filter(p => p.estoque > 0).forEach(produto => {
-    const opcao = document.createElement("option");
-    opcao.value = produto.id;
-    opcao.textContent = `${produto.nome} — ${dinheiro(produto.preco)} (Estoque: ${produto.estoque})`;
-    seletorProduto.appendChild(opcao);
-  });
+  const cliente = clientes.find(item => item.id === id);
 
-  seletorCliente.disabled = clientes.length === 0;
-  seletorProduto.disabled = !produtos.some(p => p.estoque > 0);
+  if (!cliente) {
+    preencherTabela("listaHistorico", [], 5, "Cliente não encontrado.");
+    return;
+  }
+
+  caixaCliente.classList.remove("escondido");
+
+  const informacoes = [
+    ["ID do cliente", cliente.id],
+    ["Nome", cliente.nome],
+    ["CPF", formatarCpf(cliente.cpf)],
+    ["Telefone", cliente.telefone || "Não informado"],
+    ["E-mail", cliente.email || "Não informado"]
+  ];
+
+  for (const [rotulo, valor] of informacoes) {
+    const paragrafo = document.createElement("p");
+    const titulo = document.createElement("strong");
+    titulo.textContent = `${rotulo}: `;
+    paragrafo.append(titulo, document.createTextNode(String(valor)));
+    caixaCliente.appendChild(paragrafo);
+  }
+
+  try {
+    const { data: vendasCliente, error } = await banco
+      .from("vendas")
+      .select("id, cliente_id, data_venda, total")
+      .eq("cliente_id", id)
+      .order("data_venda", { ascending: false });
+
+    if (error) throw error;
+
+    const idsVendas = (vendasCliente || []).map(venda => venda.id);
+    let itens = [];
+
+    if (idsVendas.length) {
+      const respostaItens = await banco
+        .from("itens_venda")
+        .select("venda_id, nome_produto, quantidade, subtotal")
+        .in("venda_id", idsVendas);
+
+      if (respostaItens.error) throw respostaItens.error;
+      itens = respostaItens.data || [];
+    }
+
+    const itensPorVenda = new Map();
+
+    for (const item of itens) {
+      if (!itensPorVenda.has(item.venda_id)) {
+        itensPorVenda.set(item.venda_id, []);
+      }
+      itensPorVenda.get(item.venda_id).push(item);
+    }
+
+    const linhas = [];
+
+    for (const venda of vendasCliente || []) {
+      const itensDestaVenda = itensPorVenda.get(venda.id) || [];
+
+      if (!itensDestaVenda.length) {
+        linhas.push([
+          venda.id,
+          dataFormatada(venda.data_venda),
+          "Sem item encontrado",
+          "—",
+          dinheiro.format(Number(venda.total))
+        ]);
+        continue;
+      }
+
+      for (const item of itensDestaVenda) {
+        linhas.push([
+          venda.id,
+          dataFormatada(venda.data_venda),
+          item.nome_produto,
+          item.quantidade,
+          dinheiro.format(Number(venda.total))
+        ]);
+      }
+    }
+
+    preencherTabela(
+      "listaHistorico",
+      linhas,
+      5,
+      "Este cliente ainda não possui compras."
+    );
+  } catch (erro) {
+    preencherTabela("listaHistorico", [], 5, "Não foi possível carregar o histórico.");
+    mostrarMensagem(erroLegivel(erro), "erro");
+  }
 }
 
-function renderizar() {
-  criarTabela("lista-clientes",
-    ["ID", "Nome", "Telefone", "E-mail"],
-    clientes.map(c => [c.id, c.nome, c.telefone, c.email])
-  );
+function dataLocalParaISO(dataTexto) {
+  if (!dataTexto) return null;
 
-  criarTabela("lista-produtos",
-    ["ID", "Produto", "Preço", "Estoque"],
-    produtos.map(p => [p.id, p.nome, dinheiro(p.preco), p.estoque])
-  );
+  const partes = dataTexto.split("-").map(Number);
+  if (partes.length !== 3 || partes.some(Number.isNaN)) return null;
 
-  criarTabela("lista-pedidos",
-    ["Pedido", "Cliente", "Produto", "Quantidade", "Total", "Data", "Status"],
-    pedidos.map(p => [
-      p.id,
-      p.cliente,
-      p.produto,
-      p.quantidade,
-      dinheiro(p.total),
-      new Date(p.data).toLocaleDateString("pt-BR"),
-      p.status
-    ])
-  );
-
-  porId("total-clientes").textContent = clientes.length;
-  porId("total-produtos").textContent = produtos.length;
-  porId("total-pedidos").textContent = pedidos.length;
-
-  const concluidos = pedidos.filter(p => p.status === "Concluído");
-  const total = concluidos.reduce((soma, p) => soma + p.total, 0);
-
-  porId("faturamento").textContent = dinheiro(total);
-
-  criarTabela("pedidos-recentes",
-    ["Pedido", "Cliente", "Total", "Status"],
-    [...pedidos].reverse().slice(0, 5).map(p => [
-      p.id, p.cliente, dinheiro(p.total), p.status
-    ])
-  );
-
-  atualizarSeletores();
-  gerarRelatorio();
+  return new Date(partes[0], partes[1] - 1, partes[2]);
 }
 
-document.querySelectorAll("[data-pagina]").forEach(botao => {
-  botao.addEventListener("click", () => {
-    document.querySelectorAll(".pagina").forEach(pagina => {
-      pagina.classList.add("escondido");
+async function desenharRelatorio() {
+  const inicialTexto = document.getElementById("dataInicial").value;
+  const finalTexto = document.getElementById("dataFinal").value;
+
+  let consulta = banco
+    .from("vendas")
+    .select("id, cliente_id, data_venda, total")
+    .order("data_venda", { ascending: false });
+
+  if (inicialTexto) {
+    const inicial = dataLocalParaISO(inicialTexto);
+    if (!inicial) throw new Error("A data inicial é inválida.");
+    consulta = consulta.gte("data_venda", inicial.toISOString());
+  }
+
+  if (finalTexto) {
+    const final = dataLocalParaISO(finalTexto);
+    if (!final) throw new Error("A data final é inválida.");
+
+    final.setDate(final.getDate() + 1);
+    consulta = consulta.lt("data_venda", final.toISOString());
+  }
+
+  if (inicialTexto && finalTexto && inicialTexto > finalTexto) {
+    throw new Error("A data inicial não pode ser posterior à data final.");
+  }
+
+  const { data, error } = await consulta;
+  if (error) throw error;
+
+  const resultado = data || [];
+  const soma = resultado.reduce(
+    (total, venda) => total + Number(venda.total),
+    0
+  );
+
+  document.getElementById("resumoRelatorio").textContent =
+    `${resultado.length} venda(s) encontrada(s). Total: ${dinheiro.format(soma)}.`;
+
+  preencherTabela(
+    "listaRelatorio",
+    resultado.map(venda => [
+      venda.id,
+      nomeCliente(venda.cliente_id),
+      dataFormatada(venda.data_venda),
+      dinheiro.format(Number(venda.total))
+    ]),
+    4,
+    "Nenhuma venda encontrada nesse período."
+  );
+}
+
+async function aplicarRelatorio(evento) {
+  if (evento) evento.preventDefault();
+
+  try {
+    exigirBanco();
+    await desenharRelatorio();
+  } catch (erro) {
+    mostrarMensagem(erroLegivel(erro), "erro");
+  }
+}
+
+function configurarAbas() {
+  const botoes = document.querySelectorAll(".aba");
+  const paineis = document.querySelectorAll(".painel");
+
+  for (const botao of botoes) {
+    botao.addEventListener("click", async () => {
+      for (const item of botoes) item.classList.remove("ativa");
+      for (const painel of paineis) painel.classList.add("escondido");
+
+      botao.classList.add("ativa");
+      document.getElementById(botao.dataset.aba).classList.remove("escondido");
+      limparMensagem();
+
+      if (botao.dataset.aba === "historico") {
+        await desenharHistorico();
+      }
+
+      if (botao.dataset.aba === "relatorios") {
+        await aplicarRelatorio();
+      }
     });
-
-    porId(botao.dataset.pagina).classList.remove("escondido");
-    avisar("");
-  });
-});
-
-porId("form-cliente").addEventListener("submit", evento => {
-  evento.preventDefault();
-
-  clientes.push({
-    id: Date.now(),
-    nome: porId("nome-cliente").value.trim(),
-    telefone: porId("telefone-cliente").value.trim(),
-    email: porId("email-cliente").value.trim()
-  });
-
-  salvar();
-  renderizar();
-  evento.target.reset();
-  avisar("Cliente cadastrado com sucesso!");
-});
-
-porId("form-produto").addEventListener("submit", evento => {
-  evento.preventDefault();
-
-  const preco = Number(porId("preco-produto").value);
-  const estoque = Number(porId("estoque-produto").value);
-  const nome = porId("nome-produto").value.trim();
-
-  if (!nome || !Number.isFinite(preco) || preco <= 0 ||
-      !Number.isInteger(estoque) || estoque < 0) {
-    avisar("Informe um produto, preço e estoque válidos.");
-    return;
   }
-
-  produtos.push({
-    id: Date.now(),
-    nome,
-    preco,
-    estoque
-  });
-
-  salvar();
-  renderizar();
-  evento.target.reset();
-  avisar("Produto cadastrado com sucesso!");
-});
-
-porId("form-pedido").addEventListener("submit", evento => {
-  evento.preventDefault();
-
-  const cliente = clientes.find(
-    c => c.id === Number(porId("cliente-pedido").value)
-  );
-
-  const produto = produtos.find(
-    p => p.id === Number(porId("produto-pedido").value)
-  );
-
-  const quantidade = Number(porId("quantidade-pedido").value);
-
-  if (!cliente || !produto || !Number.isInteger(quantidade) ||
-      quantidade < 1 || quantidade > produto.estoque) {
-    avisar("Confira o cliente, o produto e a quantidade em estoque.");
-    return;
-  }
-
-  const pedido = {
-    id: pedidos.length
-      ? Math.max(...pedidos.map(p => p.id)) + 1
-      : 1,
-    cliente: cliente.nome,
-    produto: produto.nome,
-    quantidade,
-    total: Number((produto.preco * quantidade).toFixed(2)),
-    data: new Date().toISOString(),
-    status: "Concluído"
-  };
-
-  produto.estoque -= quantidade;
-  pedidos.push(pedido);
-
-  salvar();
-  renderizar();
-  evento.target.reset();
-  porId("quantidade-pedido").value = 1;
-  avisar(`Pedido #${pedido.id} registrado com sucesso!`);
-});
-
-function gerarRelatorio() {
-  const inicio = porId("data-inicial").value;
-  const fim = porId("data-final").value;
-
-  let filtrados = pedidos.filter(p => {
-    const data = p.data.slice(0, 10);
-    return (!inicio || data >= inicio) &&
-           (!fim || data <= fim);
-  });
-
-  const concluidos = filtrados.filter(p => p.status === "Concluído");
-  const total = concluidos.reduce((soma, p) => soma + p.total, 0);
-
-  porId("relatorio-pedidos").textContent = filtrados.length;
-  porId("relatorio-total").textContent = dinheiro(total);
-
-  criarTabela("resultado-relatorio",
-    ["Pedido", "Cliente", "Produto", "Total", "Data", "Status"],
-    filtrados.map(p => [
-      p.id,
-      p.cliente,
-      p.produto,
-      dinheiro(p.total),
-      new Date(p.data).toLocaleDateString("pt-BR"),
-      p.status
-    ])
-  );
 }
 
-porId("filtrar-relatorio").addEventListener("click", () => {
-  const inicio = porId("data-inicial").value;
-  const fim = porId("data-final").value;
+function configurarEventos() {
+  const formCliente = document.getElementById("formCliente");
+  const formProduto = document.getElementById("formProduto");
+  const formVenda = document.getElementById("formVenda");
+  const historicoCliente = document.getElementById("historicoCliente");
 
-  if (inicio && fim && inicio > fim) {
-    avisar("A data inicial deve ser anterior à data final.");
+  if (formCliente) {
+    formCliente.addEventListener("submit", cadastrarCliente);
+  } else {
+    console.error("Não encontrei o elemento formCliente no HTML.");
+  }
+
+  if (formProduto) {
+    formProduto.addEventListener("submit", cadastrarProduto);
+  } else {
+    console.error("Não encontrei o elemento formProduto no HTML.");
+  }
+
+  if (formVenda) {
+    formVenda.addEventListener("submit", registrarVenda);
+  } else {
+    console.error("Não encontrei o elemento formVenda no HTML.");
+  }
+
+  if (historicoCliente) {
+    historicoCliente.addEventListener("change", desenharHistorico);
+  } else {
+    console.error("Não encontrei o elemento historicoCliente no HTML.");
+  }
+
+  const formularioRelatorio = document.getElementById("formRelatorio");
+
+  if (formularioRelatorio) {
+    formularioRelatorio.addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      await aplicarRelatorio();
+    });
+  }
+
+  const botaoLimpar = document.getElementById("limparRelatorio");
+
+  if (botaoLimpar && formularioRelatorio) {
+    botaoLimpar.addEventListener("click", async () => {
+      formularioRelatorio.reset();
+      await aplicarRelatorio();
+    });
+  }
+
+  configurarAbas();
+}
+
+async function iniciar() {
+  configurarEventos();
+
+  const chave = config.SUPABASE_ANON_KEY || "";
+  const chavePendente =
+    !chave ||
+    chave.includes("COLE_AQUI") ||
+    chave.includes("SUA_CHAVE");
+
+  if (!window.supabase || !config.SUPABASE_URL || chavePendente) {
+    statusConexao.textContent = "Configuração pendente";
+    mostrarMensagem(
+      "O sistema está carregado, mas ainda falta configurar o Supabase. " +
+      "Confira config.js e siga as instruções de instalação.",
+      "erro"
+    );
+    preencherTabela("listaClientes", [], 5, "Configure o Supabase para carregar os clientes.");
+    preencherTabela("listaProdutos", [], 4, "Configure o Supabase para carregar os produtos.");
+    preencherTabela("ultimasVendas", [], 4, "Configure o Supabase para carregar as vendas.");
+    preencherTabela("listaRelatorio", [], 4, "Configure o Supabase para carregar o relatório.");
     return;
   }
 
-  avisar("");
-  gerarRelatorio();
-});
+  banco = window.supabase.createClient(
+    config.SUPABASE_URL,
+    chave
+  );
 
-renderizar();
+  try {
+    await buscarDados();
+    statusConexao.textContent = "Conectado";
+  } catch (erro) {
+    statusConexao.textContent = "Erro de conexão";
+    mostrarMensagem(
+      "Não foi possível acessar o banco. Confira se o Supabase está rodando, " +
+      "se a chave e a URL estão corretas e se a migração foi aplicada. Detalhe: " +
+      erroLegivel(erro),
+      "erro"
+    );
+  }
+}
+
+iniciar();
