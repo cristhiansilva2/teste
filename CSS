@@ -1,166 +1,326 @@
 * {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
+:root {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #202438;
+  background: #f3f4fa;
+}
+
 body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f1f5f9;
-  color: #1e293b;
+  min-height: 100vh;
 }
 
-header {
-  background: #172554;
+.topo {
+  background: #3920a8;
   color: white;
-  padding: 24px;
+  padding: 26px max(20px, calc((100% - 1200px) / 2));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
 }
 
-header h1,
-header p {
-  margin: 5px 0;
+.topo h1 {
+  font-size: 1.7rem;
+  margin-bottom: 5px;
 }
 
-nav {
+.topo p {
+  color: #e1dcff;
+}
+
+.status {
+  background: #ffffff22;
+  border: 1px solid #ffffff55;
+  border-radius: 20px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.menu {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 16px 24px;
+  justify-content: center;
+  gap: 6px;
   background: white;
-  box-shadow: 0 2px 8px #0000000d;
+  padding: 12px;
+  border-bottom: 1px solid #e1e3ef;
 }
 
-button {
-  border: none;
-  border-radius: 6px;
+.aba {
   padding: 11px 16px;
-  background: #2563eb;
-  color: white;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #42445b;
+  font-size: 0.95rem;
   cursor: pointer;
-  font-size: 14px;
 }
 
-button:hover {
-  background: #1d4ed8;
+.aba:hover,
+.aba.ativa {
+  background: #eeeaff;
+  color: #3920a8;
 }
 
-main {
-  max-width: 1100px;
+.container {
+  max-width: 1200px;
   margin: 28px auto;
   padding: 0 20px;
+  min-height: 60vh;
 }
 
-.pagina {
+.painel {
   background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px #0000000d;
+  padding: 26px;
+  border: 1px solid #e5e6f0;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px #2024380a;
+}
+
+.painel h2 {
+  margin-bottom: 8px;
+  font-size: 1.45rem;
+}
+
+.painel h3 {
+  margin: 28px 0 14px;
+  font-size: 1.1rem;
+}
+
+.subtitulo {
+  color: #70748b;
+  margin-bottom: 20px;
 }
 
 .escondido {
-  display: none;
+  display: none !important;
 }
 
 .resumos {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  margin: 20px 0;
+  margin: 24px 0;
 }
 
-.cartao {
-  background: #eff6ff;
-  padding: 18px;
-  border-radius: 10px;
-  border-left: 4px solid #2563eb;
+.resumo {
+  background: #f8f7ff;
+  border: 1px solid #e9e4ff;
+  padding: 20px;
+  border-radius: 12px;
 }
 
-.cartao h3 {
-  font-size: 15px;
-  margin-top: 0;
+.resumo span {
+  display: block;
+  color: #666981;
+  margin-bottom: 10px;
 }
 
-.cartao p {
-  font-size: 24px;
-  font-weight: bold;
-  margin-bottom: 0;
+.resumo strong {
+  display: block;
+  font-size: 1.5rem;
+  color: #3920a8;
   overflow-wrap: anywhere;
 }
 
-form {
+.formulario {
   display: grid;
-  gap: 10px;
-  margin-bottom: 25px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 22px 0;
 }
 
 label {
-  font-weight: bold;
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: #3c4057;
 }
 
 input,
 select {
   width: 100%;
+  min-width: 0;
   padding: 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 15px;
+  border: 1px solid #d7d9e6;
+  border-radius: 8px;
   background: white;
+  color: #202438;
+  font: inherit;
+  font-weight: 400;
 }
 
-form button {
-  margin-top: 10px;
+input:focus,
+select:focus {
+  outline: 2px solid #b9adff;
+  border-color: #7359e8;
+}
+
+.botao {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: end;
+}
+
+.primario {
+  background: #5136c7;
+  color: white;
+}
+
+.primario:hover {
+  background: #3920a8;
+}
+
+.secundario {
+  background: #ececf4;
+  color: #33364c;
+}
+
+.botao:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.tabela-conteiner {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e6e7ef;
+  border-radius: 10px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 16px;
+  text-align: left;
+  font-size: 0.92rem;
 }
 
 th,
 td {
-  text-align: left;
-  padding: 12px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 13px 14px;
+  border-bottom: 1px solid #e9eaf2;
+  white-space: nowrap;
 }
 
 th {
-  background: #f8fafc;
+  background: #f7f6fc;
+  color: #4b4e65;
+  font-weight: 700;
 }
 
-.tabela-container {
-  overflow-x: auto;
+tbody tr:last-child td {
+  border-bottom: none;
 }
 
-.excluir {
-  background: #dc2626;
+tbody tr:hover {
+  background: #faf9ff;
 }
 
-.excluir:hover {
-  background: #b91c1c;
+.mensagem {
+  display: none;
+  padding: 13px 16px;
+  border-radius: 9px;
+  margin-bottom: 18px;
+  line-height: 1.5;
 }
 
-#mensagem {
-  padding: 10px 0;
-  font-weight: bold;
+.mensagem.sucesso {
+  display: block;
+  color: #17653c;
+  background: #e7f7ed;
+  border: 1px solid #b8e7c8;
 }
 
-@media (max-width: 600px) {
-  nav {
-    padding: 12px;
+.mensagem.erro {
+  display: block;
+  color: #9c2525;
+  background: #fff0f0;
+  border: 1px solid #f0c5c5;
+}
+
+.campo-filtro {
+  max-width: 500px;
+  margin: 20px 0;
+}
+
+.dados-cliente {
+  margin: 18px 0;
+  padding: 18px;
+  background: #f8f7ff;
+  border: 1px solid #e5e0ff;
+  border-radius: 10px;
+  line-height: 1.9;
+}
+
+.dados-cliente strong {
+  color: #3920a8;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.filtros label {
+  min-width: 180px;
+}
+
+.aviso {
+  margin-top: 16px;
+  padding: 13px;
+  background: #fff8e6;
+  border-radius: 8px;
+  color: #795b16;
+  line-height: 1.5;
+}
+
+footer {
+  text-align: center;
+  padding: 24px 15px;
+  color: #777b90;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 760px) {
+  .topo {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
-  main {
-    padding: 0 10px;
+  .resumos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pagina {
-    padding: 16px;
+  .formulario {
+    grid-template-columns: 1fr;
   }
 
-  th,
-  td {
-    padding: 8px;
-    font-size: 13px;
+  .painel {
+    padding: 18px;
+  }
+
+  .container {
+    padding: 0 12px;
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 400px) {
+  .resumos {
+    grid-template-columns: 1fr;
   }
 }
